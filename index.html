@@ -81,7 +81,15 @@
           if (decodedText && decodedText !== lastText) {
             lastText = decodedText;
             result.textContent = decodedText;
-            message('Código QR leído correctamente. La cámara continúa activa.');
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({
+                type: 'SIGNIA_QR_READ',
+                code: decodedText
+              }, '*');
+              message('QR leído y enviado a la plataforma SIGNIA. Puede continuar con el siguiente punto.');
+            } else {
+              message('Código QR leído correctamente. La cámara continúa activa.');
+            }
             if (navigator.vibrate) navigator.vibrate(120);
           }
         },
