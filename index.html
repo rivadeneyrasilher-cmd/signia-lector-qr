@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#104F9E">
+  <title>Lector QR | Seguridad Patrimonial SIGNIA</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root{--azul:#104F9E;--celeste:#009EDD;--fondo:#f3f6fa;--texto:#18324b}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--fondo);font-family:Arial,Helvetica,sans-serif;color:var(--texto)}
+    .wrap{max-width:560px;margin:0 auto;padding:20px 16px 36px}
+    header{background:var(--azul);color:#fff;padding:22px 18px;border-radius:14px;text-align:center}
+    header h1{font-size:21px;margin:0 0 7px}
+    header p{font-size:13px;margin:0;opacity:.9}
+    .panel{background:#fff;margin-top:16px;padding:18px;border-radius:14px;box-shadow:0 2px 12px #16324b12}
+    #reader{width:100%;overflow:hidden;border-radius:10px}
+    .actions{display:flex;gap:10px;margin-top:14px}
+    button{flex:1;border:0;border-radius:9px;padding:14px 10px;font-size:15px;font-weight:700;cursor:pointer}
+    #start{background:var(--azul);color:#fff}
+    #stop{background:#e8eef5;color:var(--azul)}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    #status{margin:14px 0 0;padding:12px;border-radius:9px;background:#eef5fb;font-size:14px;line-height:1.45}
+    #result{font-size:20px;font-weight:700;overflow-wrap:anywhere;color:var(--azul);margin-top:8px}
+    .note{font-size:12px;line-height:1.5;color:#5d7185;margin:12px 0 0}
+    footer{text-align:center;color:#60758a;font-size:11px;margin-top:18px}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>SEGURIDAD PATRIMONIAL</h1>
+      <p>LECTOR QR · SIGNIA</p>
+    </header>
+    <section class="panel">
+      <div id="reader"></div>
+      <div class="actions">
+        <button id="start" type="button">ACTIVAR CÁMARA</button>
+        <button id="stop" type="button" disabled>DETENER</button>
+      </div>
+      <div id="status" role="status" aria-live="polite">Pulse «ACTIVAR CÁMARA» y permita el acceso a la cámara posterior.</div>
+      <div id="result" aria-live="polite"></div>
+      <p class="note">Prueba técnica del lector en Android Chrome. En esta etapa solo comprobamos que la cámara enfoque y lea el contenido del QR. Todavía no registra marcaciones en la base de datos.</p>
+    </section>
+    <footer>SUBGERENCIA CORPORATIVA DE SSOMA Y SS.GG.</footer>
+  </main>
+<script>
+(() => {
+  const status = document.getElementById('status');
+  const result = document.getElementById('result');
+  const start = document.getElementById('start');
+  const stop = document.getElementById('stop');
+  let scanner = null;
+  let running = false;
+  let lastText = '';
+  function message(text, error=false) {
+    status.textContent = text;
+    status.style.background = error ? '#fff0ef' : '#eef5fb';
+    status.style.color = error ? '#a12b22' : '#18324b';
+  }
+  async function startCamera() {
+    if (running) return;
+    if (typeof Html5Qrcode === 'undefined') {
+      message('No se pudo cargar el lector QR. Compruebe la conexión a internet y recargue la página.', true);
+      return;
+    }
+    start.disabled = true;
+    result.textContent = '';
+    message('Solicitando acceso a la cámara…');
+    try {
+      scanner = new Html5Qrcode('reader', { verbose: false });
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras || !cameras.length) throw new Error('No se detectó una cámara disponible.');
+      const backCamera = cameras.find(c => /back|rear|environment|trasera|posterior/i.test(c.label));
+      const cameraId = (backCamera || cameras[cameras.length - 1]).id;
+      await scanner.start(
+        cameraId,
+        { fps: 10, qrbox: (w,h) => { const side = Math.floor(Math.min(w,h)*0.72); return {width:side,height:side}; }, aspectRatio: 1.0 },
+        decodedText => {
+          if (decodedText && decodedText !== lastText) {
+            lastText = decodedText;
+            result.textContent = decodedText;
+            message('Código QR leído correctamente. La cámara continúa activa.');
+            if (navigator.vibrate) navigator.vibrate(120);
+          }
+        },
+        () => {}
+      );
+      running = true;
+      stop.disabled = false;
+      message('Cámara activa. Centre una etiqueta QR dentro del recuadro.');
+    } catch (err) {
+      const name = err && err.name;
+      let detail = err && err.message ? err.message : 'No fue posible iniciar la cámara.';
+      if (name === 'NotAllowedError' || /permission|denied/i.test(detail)) detail = 'Permiso de cámara denegado. Autorice la cámara para este sitio en Chrome.';
+      message(detail, true);
+      start.disabled = false;
+      if (scanner) { try { await scanner.clear(); } catch(e) {} scanner = null; }
+    }
+  }
+  async function stopCamera() {
+    if (scanner && running) {
+      try { await scanner.stop(); } catch(e) {}
+      try { await scanner.clear(); } catch(e) {}
+    }
+    scanner = null;
+    running = false;
+    start.disabled = false;
+    stop.disabled = true;
+    message('Cámara detenida. Puede volver a activarla.');
+  }
+  start.addEventListener('click', startCamera);
+  stop.addEventListener('click', stopCamera);
+  window.addEventListener('pagehide', () => { if (scanner && running) scanner.stop().catch(()=>{}); });
+})();
+</script>
+</body>
+</html>
